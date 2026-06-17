@@ -3,17 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dulag West District — MOOE Dashboard</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
-  <script>
-    tailwind.config = {
-      theme: { extend: { colors: { deped: { blue: '#0038A8', gold: '#FCD116', red: '#CE1126' } } } }
-    }
-  </script>
+  <title>Project A.T.L.A.S — Dulag West District</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css">
   <link rel="stylesheet" href="css/style.css" />
   <link rel="stylesheet" href="css/cdr-pdf.css" />
 </head>
@@ -32,9 +23,9 @@
       </div>
       <!-- Title -->
       <div class="text-center mb-5">
-        <div class="font-bold text-lg" style="color:#0b2445">MOOE Dashboard</div>
-        <div class="text-sm text-gray-500 mt-0.5">Dulag West District</div>
-        <div class="text-xs text-gray-400">Dulag, Leyte</div>
+        <div class="font-bold text-lg" style="color:#0b2445">Project A.T.L.A.S</div>
+        <div class="text-xs font-semibold tracking-wide mt-0.5" style="color:#1d6fb0">Automated Tracking, Liquidation and Allocation System</div>
+        <div class="text-xs text-gray-500 mt-1">Dulag West District · Dulag, Leyte</div>
       </div>
       <!-- Error -->
       <div id="login-error" class="hidden mb-3 px-3 py-2 bg-red-50 border border-red-200 text-red-600 text-sm rounded-lg"></div>
@@ -81,7 +72,7 @@
   <aside id="sidebar" class="fixed top-0 left-0 h-full w-64 z-30 flex flex-col -translate-x-full lg:translate-x-0 transition-transform duration-200"
          style="background:#1a2035">
     <!-- Logo -->
-    <div class="px-5 py-5 border-b border-gray-700">
+    <div class="px-5 py-3 border-b border-gray-700">
       <div class="flex items-center gap-3">
         <div class="w-9 h-9 rounded-full overflow-hidden shrink-0">
             <img src="images/logo.png" alt="Dulag West District" class="w-full h-full object-contain" />
@@ -94,54 +85,71 @@
     </div>
 
     <!-- Nav links -->
-    <nav class="flex-1 py-3 overflow-y-auto">
+    <nav class="flex-1 py-1 overflow-hidden">
 
       <!-- Dashboard -->
-      <a href="#" class="nav-link flex items-center gap-3 px-5 py-2.5 text-gray-300 text-sm hover:text-white hover:bg-white hover:bg-opacity-10 transition-colors" data-view="dashboard">
+      <a href="#" class="nav-link flex items-center gap-3 px-5 py-2 text-gray-300 hover:text-white hover:bg-white hover:bg-opacity-10 transition-colors" style="font-size:14px" data-view="dashboard">
         <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
         Dashboard
       </a>
 
       <!-- FUNDS section -->
-      <div class="px-5 pt-4 pb-1.5">
+      <div class="px-5 pt-3 pb-1">
         <div class="text-xs font-semibold uppercase tracking-wider" style="color:#4b5563">Funds</div>
       </div>
-      <a href="#" class="nav-link flex items-center gap-3 px-5 py-2.5 text-gray-300 text-sm hover:text-white hover:bg-white hover:bg-opacity-10 transition-colors" data-view="funds_mooe">
+      <a href="#" class="nav-link flex items-center gap-3 px-5 py-2 text-gray-300 hover:text-white hover:bg-white hover:bg-opacity-10 transition-colors" style="font-size:14px" data-view="funds_mooe">
         <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
         MOOE
       </a>
-      <a href="#" class="nav-link flex items-center gap-3 px-5 py-2.5 text-gray-300 text-sm hover:text-white hover:bg-white hover:bg-opacity-10 transition-colors" data-view="funds_special">
+      <a href="#" class="nav-link flex items-center gap-3 px-5 py-2 text-gray-300 hover:text-white hover:bg-white hover:bg-opacity-10 transition-colors" style="font-size:14px" data-view="funds_special">
         <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
         Special Funds
       </a>
 
-      <!-- RECORDS section -->
-      <div class="px-5 pt-4 pb-1.5">
-        <div class="text-xs font-semibold uppercase tracking-wider" style="color:#4b5563">Records</div>
+      <!-- REPORTS section -->
+      <div class="px-5 pt-3 pb-1">
+        <div class="text-xs font-semibold uppercase tracking-wider" style="color:#4b5563">Reports</div>
       </div>
-      <a href="#" class="nav-link flex items-center gap-3 px-5 py-2.5 text-gray-300 text-sm hover:text-white hover:bg-white hover:bg-opacity-10 transition-colors" data-view="cdr_mooe">
+      <a href="#" class="nav-link flex items-center gap-3 px-5 py-2 text-gray-300 hover:text-white hover:bg-white hover:bg-opacity-10 transition-colors" style="font-size:14px" data-view="cdr_mooe">
         <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-        Cash Disbursement Register
+        CDR MOOE
       </a>
-      <a href="#" class="nav-link flex items-center gap-3 px-5 py-2.5 text-gray-300 text-sm hover:text-white hover:bg-white hover:bg-opacity-10 transition-colors" data-view="resources">
+      <a href="#" class="nav-link flex items-center gap-3 px-5 py-2 text-gray-300 hover:text-white hover:bg-white hover:bg-opacity-10 transition-colors" style="font-size:14px" data-view="cdr_special">
+        <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        CDR Special Funds
+      </a>
+      <a href="#" class="nav-link flex items-center gap-3 px-5 py-2 text-gray-300 hover:text-white hover:bg-white hover:bg-opacity-10 transition-colors" style="font-size:14px" data-view="check_issued">
+        <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
+        Check Issued
+      </a>
+      <a href="#" class="nav-link flex items-center gap-3 px-5 py-2 text-gray-300 hover:text-white hover:bg-white hover:bg-opacity-10 transition-colors" style="font-size:14px" data-view="cancel_check">
+        <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        Cancelled Check
+      </a>
+
+      <!-- REFERENCES section -->
+      <div class="px-5 pt-3 pb-1">
+        <div class="text-xs font-semibold uppercase tracking-wider" style="color:#4b5563">References</div>
+      </div>
+      <a href="#" class="nav-link flex items-center gap-3 px-5 py-2 text-gray-300 hover:text-white hover:bg-white hover:bg-opacity-10 transition-colors" style="font-size:14px" data-view="resources">
         <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
         Resources
       </a>
-      <a href="#" class="nav-link flex items-center gap-3 px-5 py-2.5 text-gray-300 text-sm hover:text-white hover:bg-white hover:bg-opacity-10 transition-colors" data-view="schools">
+      <a href="#" class="nav-link flex items-center gap-3 px-5 py-2 text-gray-300 hover:text-white hover:bg-white hover:bg-opacity-10 transition-colors" style="font-size:14px" data-view="schools">
         <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
         Schools
       </a>
 
-      <div class="my-3 mx-5 border-t border-gray-700"></div>
-
-      <a href="#" id="nav-setup" class="nav-link flex items-center gap-3 px-5 py-2.5 text-gray-300 text-sm hover:text-white hover:bg-white hover:bg-opacity-10 transition-colors" data-view="setup">
-        <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><circle cx="12" cy="12" r="3" stroke-linecap="round"/></svg>
-        Setup / Config
-      </a>
     </nav>
 
     <!-- Footer -->
-    <div class="px-5 py-4 border-t border-gray-700">
+    <div class="border-t border-gray-700">
+      <a href="#" id="nav-setup" class="nav-link flex items-center gap-3 px-5 py-2 text-gray-300 hover:text-white hover:bg-white hover:bg-opacity-10 transition-colors" style="font-size:14px" data-view="setup">
+        <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><circle cx="12" cy="12" r="3" stroke-linecap="round"/></svg>
+        Setup / Config
+      </a>
+    </div>
+    <div class="px-5 py-2 border-t border-gray-700">
       <div id="conn-status" class="text-xs px-2 py-1 rounded-full bg-yellow-100 text-yellow-700 font-medium inline-block mb-2">⚡ Local only</div>
       <div id="sidebar-user-name" class="text-blue-300 text-xs leading-tight font-semibold"></div>
       <div id="sidebar-user-role" class="text-blue-400 text-xs"></div>
@@ -166,7 +174,7 @@
           <div id="page-subtitle" class="text-xs text-gray-500">Overview</div>
         </div>
       </div>
-      <div class="text-xs text-gray-400 hidden sm:block">Dulag West District MOOE Dashboard</div>
+      <div class="text-xs text-gray-400 hidden sm:block">Project A.T.L.A.S · Dulag West District</div>
     </header>
 
     <!-- Content -->
@@ -193,6 +201,9 @@
   <!-- Toast -->
   <div id="toast" class="hidden fixed bottom-5 right-5 z-50 text-sm px-4 py-3 rounded-lg shadow-lg max-w-xs bg-gray-900 text-white"></div>
 
+  <!-- Supabase loads async in the background while user is on login screen -->
+  <script async src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
   <!-- Scripts (order matters) -->
   <script src="js/users-data.js"></script>
   <script src="js/auth.js"></script>
@@ -202,6 +213,11 @@
   <script src="js/views/mooe.js"></script>
   <script src="js/views/cdr.js"></script>
   <script src="js/views/cdr-pdf.js"></script>
+  <script src="js/views/cdr-excel.js"></script>
+  <script src="js/views/cdr-generate.js"></script>
+  <script src="js/views/cdr-xlsx.js"></script>
+  <script src="js/views/check-issued.js"></script>
+  <script src="js/views/cancel-check.js"></script>
   <script src="js/views/funds.js"></script>
   <script src="js/views/resources.js"></script>
   <script src="js/views/schools.js"></script>

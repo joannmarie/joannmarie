@@ -69,8 +69,7 @@ const SetupView = {
         <div class="flex justify-center py-6"><div class="spinner"></div></div>
       </div>
       <div class="px-5 pb-4 border-t pt-3 bg-gray-50">
-        <p class="text-xs text-gray-500 mb-2">After adding/removing accounts, export and send the file to your developer to publish the changes for all devices.</p>
-        <button class="btn btn-secondary btn-sm" onclick="SetupView.exportUsers()">Export Users File</button>
+        <p class="text-xs text-gray-500">Accounts are saved to Supabase and go live immediately on all devices.</p>
       </div>
     </div>
 
@@ -134,6 +133,23 @@ const SetupView = {
       </div>
     </div>
 
+    <!-- Data Cleanup -->
+    <div class="section-card mb-4">
+      <div class="section-card-header">
+        <h3>Data Cleanup</h3>
+        <span class="badge badge-missing">Irreversible</span>
+      </div>
+      <div class="section-card-body">
+        <p class="text-sm text-gray-600 mb-1">Removes old CDR records per archive policy:</p>
+        <ul class="text-sm text-gray-700 list-disc list-inside mb-3 space-y-0.5">
+          <li><strong>CDR MOOE</strong> — keep 2026 only, delete all other years</li>
+          <li><strong>CDR Special Funds</strong> — keep 2025 &amp; 2026, delete all other years</li>
+        </ul>
+        <p class="text-xs text-gray-500 mb-3">CDR entries are removed automatically. Fund records are not affected.</p>
+        <button class="btn btn-danger" onclick="SetupView.purgeOldData()">Purge Old Data…</button>
+      </div>
+    </div>
+
     <!-- Backup / Restore -->
     <div class="section-card mb-4">
       <div class="section-card-header"><h3>Data Backup &amp; Restore</h3></div>
@@ -176,15 +192,17 @@ const SetupView = {
   },
 
   async afterRender() {
-    this.loadUsers();
-    await this.loadFundTypes();
+    await Promise.all([this.loadUsers(), this.loadFundTypes()]);
   },
 
-  loadUsers() {
-    const users = Auth.getUsers();
+  async loadUsers() {
     const el = document.getElementById('users-list');
     if (!el) return;
-    const schoolUsers = users.filter(u => u.role === 'school');
+    // Merge Supabase users with USERS_DATA school users
+    const { data: supaUsers } = await DB.getAppUsers();
+    const localUsers  = Auth.getUsers().filter(u => u.role === 'school');
+    const supaIds     = new Set((supaUsers || []).map(u => u.id));
+    const schoolUsers = [...(supaUsers || []), ...localUsers.filter(u => !supaIds.has(u.id))];
     if (!schoolUsers.length) {
       el.innerHTML = `<div class="px-6 py-6 text-sm text-gray-400 text-center">No school accounts yet. Click "+ Add School Account" to create one.</div>`;
       return;
@@ -283,18 +301,21 @@ const SetupView = {
     App.openModal('Add School Account', html);
   },
 
-  saveUser(e) {
+  async saveUser(e) {
     e.preventDefault();
-    const schoolEl = document.getElementById('u-school');
-    const school_id = schoolEl.value;
+    const btn = e.target.querySelector('button[type="submit"]');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+    const schoolEl    = document.getElementById('u-school');
+    const school_id   = schoolEl.value;
     const school_name = schoolEl.options[schoolEl.selectedIndex]?.dataset?.name || '';
-    const username = document.getElementById('u-username').value.trim();
-    const password = document.getElementById('u-password').value;
-    const { error } = Auth.addSchoolUser(username, password, school_id, school_name);
+    const username    = document.getElementById('u-username').value.trim();
+    const password    = document.getElementById('u-password').value;
+    const { error }   = await Auth.addSchoolUser(username, password, school_id, school_name);
+    if (btn) { btn.disabled = false; btn.textContent = 'Create Account'; }
     if (error) { App.toast(error, 'error'); return; }
     App.closeModal();
     App.toast('School account created!');
-    this.loadUsers();
+    await this.loadUsers();
   },
 
   openResetPassword(id, username) {
@@ -313,11 +334,13 @@ const SetupView = {
     App.openModal('Reset Password', html);
   },
 
-  resetPassword(e, id) {
+  async resetPassword(e, id) {
     e.preventDefault();
-    Auth.updateUserPassword(id, document.getElementById('reset-pw').value);
+    const btn = e.target.querySelector('button[type="submit"]');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+    await Auth.updateUserPassword(id, document.getElementById('reset-pw').value);
     App.closeModal();
-    App.toast('Password reset!');
+    App.toast('Password updated! Changes are live immediately.');
   },
 
   exportUsers() {
@@ -334,11 +357,11 @@ const SetupView = {
     App.toast('users-data.js downloaded! Send this file to your developer.');
   },
 
-  deleteUser(id) {
+  async deleteUser(id) {
     if (!confirm('Delete this school account?')) return;
-    Auth.deleteUser(id);
+    await Auth.deleteUser(id);
     App.toast('Account deleted.');
-    this.loadUsers();
+    await this.loadUsers();
   },
 
   saveCredentials(e) {
@@ -412,6 +435,53 @@ const SetupView = {
     App.navigate('dashboard');
   },
 
+  async purgeOldData() {
+    App.toast('Scanning data…');
+
+    const isMOOE = ft => {
+      if (!ft) return false;
+      const f = ft.toLowerCase();
+      return /(1st|2nd|3rd|4th)\s+quarter/.test(f)
+          || f.includes('regular mooe')
+          || f.includes('additional mooe');
+    };
+
+    const [fundsRes, headersRes] = await Promise.all([
+      DB.getFunds(),
+      DB.getCDRHeaders(),
+    ]);
+
+    const funds   = fundsRes.data   || [];
+    const headers = headersRes.data || [];
+
+    const cdrsToDelete = headers.filter(h => {
+      const yr = parseInt(h.year, 10);
+      // MOOE: keep only 2026. Special Funds: keep only 2025 and 2026.
+      return isMOOE(h.fund_type) ? yr !== 2026 : (yr !== 2025 && yr !== 2026);
+    });
+
+    if (!cdrsToDelete.length) {
+      App.toast('Nothing to delete — CDR data is already clean.');
+      return;
+    }
+
+    const msg = `This will permanently delete:\n• ${cdrsToDelete.length} CDR record(s) + all their entries\n\nMOOE: keeps 2026 only.\nSpecial Funds: keeps 2025 and 2026 only.\n\nThis CANNOT be undone. Continue?`;
+    if (!confirm(msg)) return;
+    if (!confirm('Final confirmation: delete old CDR data now?')) return;
+
+    let errors = 0;
+    for (const h of cdrsToDelete) {
+      const { error } = await DB.deleteCDRHeader(h.id);
+      if (error) { console.error('deleteCDRHeader', h.id, error); errors++; }
+    }
+
+    if (errors) {
+      App.toast(`Done with ${errors} error(s). Check console for details.`, 'error');
+    } else {
+      App.toast(`Deleted ${cdrsToDelete.length} CDR record(s) successfully.`);
+    }
+  },
+
   schemaSql() {
     return `-- Dulag West District MOOE Dashboard
 -- Run this in Supabase SQL Editor
@@ -429,6 +499,24 @@ create table if not exists schools (
   updated_at timestamptz default now()
 );
 
+-- Fund Releases (MOOE + Special Funds)
+create table if not exists downloaded_funds (
+  id text primary key,
+  school_id text references schools(id) on delete cascade,
+  ada_no text,
+  ada_date date,
+  fund_type text,
+  amount numeric(14,2) default 0,
+  status text default 'unliquidated',
+  year integer,
+  quarter text,
+  bank text,
+  deadline date,
+  remarks text,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
 -- MOOE Disbursements
 create table if not exists disbursements (
   id text primary key,
@@ -437,7 +525,7 @@ create table if not exists disbursements (
   ada_date date,
   fund_type text,
   amount numeric(14,2) default 0,
-  status text default 'pending',
+  status text default 'unliquidated',
   remarks text,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
@@ -447,10 +535,12 @@ create table if not exists disbursements (
 create table if not exists cdr_headers (
   id text primary key,
   school_id text references schools(id) on delete cascade,
+  fund_id text,
   year integer,
   quarter text,
   fund_type text,
-  opening_balance numeric(14,2) default 0,
+  register_no text,
+  sheet_no text,
   entry_count integer default 0,
   created_at timestamptz default now()
 );
@@ -468,6 +558,7 @@ create table if not exists cdr_entries (
   ref_no text,
   payee text,
   sort_order bigint,
+  uacs_lines text,
   created_at timestamptz default now()
 );
 
@@ -482,17 +573,42 @@ create table if not exists resources (
   created_at timestamptz default now()
 );
 
--- Enable Row Level Security and allow all operations (adjust as needed)
+-- Bank Reconciliation
+create table if not exists bank_reconciliation (
+  id text primary key,
+  school_id text references schools(id) on delete cascade,
+  period text,
+  bank text,
+  year integer,
+  month integer,
+  balance numeric(14,2) default 0,
+  remarks text,
+  created_at timestamptz default now()
+);
+
+-- Enable Row Level Security and allow all operations
 alter table schools enable row level security;
+alter table downloaded_funds enable row level security;
 alter table disbursements enable row level security;
 alter table cdr_headers enable row level security;
 alter table cdr_entries enable row level security;
 alter table resources enable row level security;
+alter table bank_reconciliation enable row level security;
+
+drop policy if exists "Allow all" on schools;
+drop policy if exists "Allow all" on downloaded_funds;
+drop policy if exists "Allow all" on disbursements;
+drop policy if exists "Allow all" on cdr_headers;
+drop policy if exists "Allow all" on cdr_entries;
+drop policy if exists "Allow all" on resources;
+drop policy if exists "Allow all" on bank_reconciliation;
 
 create policy "Allow all" on schools for all using (true) with check (true);
+create policy "Allow all" on downloaded_funds for all using (true) with check (true);
 create policy "Allow all" on disbursements for all using (true) with check (true);
 create policy "Allow all" on cdr_headers for all using (true) with check (true);
 create policy "Allow all" on cdr_entries for all using (true) with check (true);
-create policy "Allow all" on resources for all using (true) with check (true);`;
+create policy "Allow all" on resources for all using (true) with check (true);
+create policy "Allow all" on bank_reconciliation for all using (true) with check (true);`;
   },
 };

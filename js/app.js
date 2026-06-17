@@ -10,6 +10,8 @@ const App = {
     funds_special:{ title: 'Special Funds', subtitle: 'Fund Releases',                      obj: () => FundsSpecialView },
     cdr_mooe:     { title: 'MOOE',          subtitle: 'Cash Disbursement Register',          obj: () => CDRMOOEView },
     cdr_special:  { title: 'Special Funds', subtitle: 'Cash Disbursement Register',          obj: () => CDRSpecialView },
+    check_issued: { title: 'Check Issued',  subtitle: 'Payment Records',                     obj: () => CheckIssuedView },
+    cancel_check: { title: 'Cancelled Check', subtitle: 'Voided Payment Records',              obj: () => CancelCheckView },
     resources:    { title: 'Resources',     subtitle: 'Documents & Links',                  obj: () => ResourcesView },
     schools:      { title: 'Schools',       subtitle: 'Accountable Officers',               obj: () => SchoolsView },
     setup:        { title: 'Setup / Config',subtitle: 'Supabase & Settings',                obj: () => SetupView },
@@ -19,24 +21,18 @@ const App = {
   },
 
   async init() {
-    const connected = DB.init();
-    this.updateConnectionStatus(connected);
-
-    // Apply role-based UI
+    // Apply role-based UI immediately — no network needed
     const isAdmin = typeof Auth !== 'undefined' && Auth.isAdmin();
     const user = typeof Auth !== 'undefined' ? Auth.currentUser : null;
 
-    // Hide Setup nav for school users
     const setupNav = document.getElementById('nav-setup');
     if (setupNav) setupNav.style.display = isAdmin ? '' : 'none';
 
-    // Show logged-in user in sidebar footer
     const nameEl = document.getElementById('sidebar-user-name');
     const roleEl = document.getElementById('sidebar-user-role');
     if (nameEl && user) nameEl.textContent = user.role === 'admin' ? 'Jo Ann Marie P. Cagara' : (user.school_name || user.username);
     if (roleEl && user) roleEl.textContent = user.role === 'admin' ? 'ADAS III (Sr. Bookkeeper)' : 'School Account';
 
-    // Handle nav clicks
     document.querySelectorAll('.nav-link').forEach(el => {
       el.addEventListener('click', (e) => {
         e.preventDefault();
@@ -45,9 +41,41 @@ const App = {
       });
     });
 
-    // Navigate to hash or default
+    // Navigate immediately — don't wait for Supabase
     const hash = location.hash.slice(1) || 'dashboard';
     this.navigate(this.views[hash] ? hash : 'dashboard');
+
+    // Init DB in background, then refresh with live Supabase data
+    const connected = await DB.init();
+    this.updateConnectionStatus(connected);
+
+    // School user ID resolution (edge case: IDs mismatched between local and Supabase)
+    const _user = typeof Auth !== 'undefined' ? Auth.currentUser : null;
+    if (connected && _user && _user.role === 'school') {
+      const { data: _schools } = await DB.getSchools();
+      if (_schools && _schools.length > 0) {
+        const _match = _schools.find(s => s.id === _user.school_id)
+                    || _schools.find(s => s.name === _user.school_name);
+        if (_match && _match.id !== _user.school_id) {
+          _user.school_id = _match.id;
+          Auth.currentUser = _user;
+          sessionStorage.setItem(Auth.SESSION_KEY, JSON.stringify(_user));
+        }
+      }
+    }
+
+    if (connected) {
+      // Populate localStorage with fresh Supabase data for the next page load
+      DB.preload();
+
+      // Refresh current view with live Supabase data
+      const v = this.views[this.currentView];
+      if (v) {
+        const obj = v.obj();
+        const reload = obj._fetchAndPaint || obj._loadAFD || obj._initView || obj.load;
+        if (typeof reload === 'function') reload.call(obj);
+      }
+    }
   },
 
   async navigate(viewName) {
@@ -56,8 +84,7 @@ const App = {
     location.hash = viewName;
 
     // Update nav active state
-    // cdr_special highlights the cdr_mooe nav link; legacy dash routes highlight dashboard
-    const navParents = { cdr_special: 'cdr_mooe', dash_mooe: 'dashboard', dash_special: 'dashboard' };
+    const navParents = { dash_mooe: 'dashboard', dash_special: 'dashboard' };
     const activeNav  = navParents[viewName] || viewName;
     document.querySelectorAll('.nav-link').forEach(el => {
       el.classList.toggle('active', el.dataset.view === activeNav);
@@ -131,6 +158,7 @@ const App = {
     sidebar.classList.add('-translate-x-full');
     overlay.classList.add('hidden');
   },
+
 };
 
 // Close modal on backdrop click

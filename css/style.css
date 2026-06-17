@@ -8,10 +8,21 @@
 /* Table styles */
 .data-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
 .data-table th { background: #f1f5f9; color: #475569; font-weight: 600; text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.05em; padding: 10px 12px; text-align: left; border-bottom: 2px solid #e2e8f0; white-space: nowrap; }
-.data-table th.text-right { text-align: right; }
 .data-table td { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
 .data-table tr:last-child td { border-bottom: none; }
 .data-table tr:hover td { background: #f8fafc; }
+
+/*
+ * Column alignment utilities.
+ * Specificity must beat .data-table th (0,1,1), so we use (0,2,1) selectors.
+ * Standalone .col-amount / .col-center are kept for use outside .data-table.
+ */
+.col-amount { text-align: right; white-space: nowrap; }
+.col-center  { text-align: center; }
+.data-table th.col-amount,
+.data-table td.col-amount { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.data-table th.col-center,
+.data-table td.col-center  { text-align: center; }
 
 /* Status badges */
 .badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: 999px; font-size: 0.72rem; font-weight: 600; white-space: nowrap; }

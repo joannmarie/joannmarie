@@ -5,19 +5,16 @@ const MOOEView = {
   filters: { school_id: '', year: new Date().getFullYear().toString(), status: '', fund_type: '' },
   schools: [],
 
-  async render() {
-    const { data: schools } = await DB.getSchools();
-    this.schools = schools || [];
+  render() {
     this._schoolId = typeof Auth !== 'undefined' ? Auth.getSchoolId() : null;
     if (this._schoolId) this.filters.school_id = this._schoolId;
 
     const schoolDropdown = this._schoolId
       ? `<select class="form-select" id="f-school" disabled>
-           <option value="${this._schoolId}">${this.schools.find(s => s.id === this._schoolId)?.name || 'My School'}</option>
+           <option value="${this._schoolId}">My School</option>
          </select>`
       : `<select class="form-select" id="f-school" onchange="MOOEView.applyFilter()">
            <option value="">All Schools</option>
-           ${this.schools.map(s => `<option value="${s.id}" ${this.filters.school_id === s.id ? 'selected' : ''}>${s.name}</option>`).join('')}
          </select>`;
 
     return `
@@ -67,8 +64,22 @@ const MOOEView = {
     `;
   },
 
-  async afterRender() {
-    await this.loadTable();
+  afterRender() { this._initView(); },
+
+  async _initView() {
+    const { data: schools } = await DB.getSchools();
+    this.schools = schools || [];
+    const sel = document.getElementById('f-school');
+    if (sel) {
+      if (this._schoolId) {
+        const s = this.schools.find(s => s.id === this._schoolId);
+        if (s) sel.innerHTML = `<option value="${this._schoolId}">${s.name}</option>`;
+      } else {
+        sel.innerHTML = `<option value="">All Schools</option>` +
+          this.schools.map(s => `<option value="${s.id}" ${this.filters.school_id === s.id ? 'selected' : ''}>${s.name}</option>`).join('');
+      }
+    }
+    this.loadTable();
   },
 
   applyFilter() {
@@ -102,7 +113,7 @@ const MOOEView = {
         <table class="data-table">
           <thead><tr>
             <th>ADA No.</th><th>ADA Date</th><th>Fund Type</th><th>Bank</th>
-            <th>School</th><th class="text-right">Amount</th>
+            <th>School</th><th class="col-amount">Amount</th>
             <th>Status</th><th>Remarks</th><th class="text-center">Action</th>
           </tr></thead>
           <tbody>
@@ -113,7 +124,7 @@ const MOOEView = {
               <td>${r.fund_type || '—'}</td>
               <td><span class="badge ${r.bank === 'LBP' ? 'badge-submitted' : 'badge-pending'}">${r.bank || '—'}</span></td>
               <td>${schoolNameById(r.school_id, this.schools)}</td>
-              <td class="text-right font-semibold tabular-nums">${fmt(r.amount)}</td>
+              <td class="col-amount font-semibold tabular-nums">${fmt(r.amount)}</td>
               <td>${statusBadge(r.status)}</td>
               <td class="text-xs text-gray-500 max-w-xs truncate">${r.remarks || ''}</td>
               <td class="text-center whitespace-nowrap">
@@ -212,7 +223,7 @@ const MOOEView = {
   async deleteDisbursement(id) {
     if (!confirm('Delete this disbursement?')) return;
     const { error } = await DB.deleteDisbursement(id);
-    if (error) { App.toast('Error: ' + error, 'error'); return; }
+    if (error) { App.toast('Error: ' + (error?.message || error), 'error'); return; }
     App.toast('Deleted.');
     await this.loadTable();
   },

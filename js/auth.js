@@ -62,13 +62,29 @@ const Auth = {
     return null;
   },
 
-  login(e) {
+  async login(e) {
     e.preventDefault();
     const username = document.getElementById('login-username').value.trim();
     const password = document.getElementById('login-password').value;
-    const errEl = document.getElementById('login-error');
-    const users = this._getUsers();
-    const user = users.find(u => u.username === username && u.passwordHash === this._hash(password));
+    const errEl    = document.getElementById('login-error');
+    const btn      = e.target.querySelector('button[type="submit"]');
+    const hash     = this._hash(password);
+
+    // 1. Try local users first — instant, no network (covers admin always)
+    let user = this._getUsers().find(u => u.username === username && u.passwordHash === hash);
+
+    // 2. Not found locally — check Supabase school accounts
+    if (!user) {
+      if (btn) { btn.disabled = true; btn.textContent = 'Signing in...'; }
+      try {
+        if (typeof DB !== 'undefined') await DB.init(); // ensure ready if still initialising
+        const { data } = await DB.getAppUsers();
+        if (data && data.length) {
+          user = data.find(u => u.username === username && u.passwordHash === hash);
+        }
+      } catch {}
+      if (btn) { btn.disabled = false; btn.textContent = 'Sign In'; }
+    }
 
     if (user) {
       this.currentUser = user;
@@ -91,32 +107,36 @@ const Auth = {
 
   getUsers() { return this._getUsers(); },
 
-  addSchoolUser(username, password, school_id, school_name) {
-    const users = this._getUsers();
-    if (users.find(u => u.username.toLowerCase() === username.toLowerCase())) {
+  async addSchoolUser(username, password, school_id, school_name) {
+    const { data: existing } = await DB.getAppUsers();
+    const local = this._getUsers();
+    const all   = [...local, ...(existing || [])];
+    if (all.find(u => u.username.toLowerCase() === username.toLowerCase())) {
       return { error: 'Username already exists.' };
     }
-    users.push({
+    const user = {
       id: 'u_' + Date.now().toString(36),
       username: username.trim(),
       passwordHash: this._hash(password),
       role: 'school',
       school_id,
       school_name,
-    });
-    this._saveUsers(users);
-    return { error: null };
+    };
+    const { error } = await DB.upsertAppUser(user);
+    return { error: error ? (error.message || 'Failed to save.') : null };
   },
 
-  updateUserPassword(id, newPassword) {
-    const users = this._getUsers();
-    const idx = users.findIndex(u => u.id === id);
-    if (idx > -1) { users[idx].passwordHash = this._hash(newPassword); this._saveUsers(users); }
+  async updateUserPassword(id, newPassword) {
+    const { data: users } = await DB.getAppUsers();
+    const user = (users || []).find(u => u.id === id)
+              || this._getUsers().find(u => u.id === id);
+    if (user) {
+      await DB.upsertAppUser({ ...user, passwordHash: this._hash(newPassword) });
+    }
   },
 
-  deleteUser(id) {
-    const users = this._getUsers().filter(u => u.id !== id);
-    this._saveUsers(users);
+  async deleteUser(id) {
+    await DB.deleteAppUser(id);
   },
 
   changeAdminCredentials(username, password) {
@@ -138,4 +158,7 @@ const Auth = {
   },
 };
 
-document.addEventListener('DOMContentLoaded', () => Auth.guard());
+document.addEventListener('DOMContentLoaded', () => {
+  Auth.guard(); // show login screen immediately — no network wait
+  if (typeof DB !== 'undefined') DB.init(); // initialise Supabase in background
+});

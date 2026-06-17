@@ -4,24 +4,21 @@
 const CDRView = {
   _category: '',
 
-  async render(category = '') {
+  render(category = '') {
     this._category = category;
     this._schoolId = typeof Auth !== 'undefined' ? Auth.getSchoolId() : null;
-    const [schoolsRes, headersRes] = await Promise.all([DB.getSchools(), DB.getCDRHeaders()]);
-    const schools = schoolsRes.data || [];
-
-    const schoolOpts = schools.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
-    const years = [];
-    const yr = new Date().getFullYear();
-    for (let y = yr; y >= yr - 4; y--) years.push(y);
 
     const schoolDropdown = this._schoolId
       ? `<select id="cdr-filter-school" class="form-select" disabled>
-           <option value="${this._schoolId}">${schools.find(s => s.id === this._schoolId)?.name || 'My School'}</option>
+           <option value="${this._schoolId}">My School</option>
          </select>`
       : `<select id="cdr-filter-school" class="form-select" onchange="CDRView.load()">
-           <option value="">All Schools</option>${schoolOpts}
+           <option value="">All Schools</option>
          </select>`;
+
+    const yearOpts = this._category === 'mooe'
+      ? `<option value="">All Years</option><option value="2026">2026</option>`
+      : `<option value="">All Years</option><option value="2026">2026</option><option value="2025">2025</option>`;
 
     return `
     <div class="section-card mb-4">
@@ -38,19 +35,17 @@ const CDRView = {
           <div>
             <label class="form-label">Year</label>
             <select id="cdr-filter-year" class="form-select" onchange="CDRView.load()">
-              <option value="">All Years</option>
-              ${years.map(y => `<option value="${y}" ${y === yr ? 'selected' : ''}>${y}</option>`).join('')}
+              ${yearOpts}
             </select>
           </div>
           <div>
-            <label class="form-label">Quarter</label>
-            <select id="cdr-filter-quarter" class="form-select" onchange="CDRView.load()">
-              <option value="">All Quarters</option>
-              <option>Q1</option><option>Q2</option><option>Q3</option><option>Q4</option>
+            <label class="form-label">Fund Type</label>
+            <select id="cdr-filter-fundtype" class="form-select" onchange="CDRView.load()">
+              <option value="">All Fund Types</option>
             </select>
           </div>
-          <div class="flex items-end">
-            <button class="btn btn-primary w-full" onclick="CDRView.openCreate()">
+          <div class="flex items-end gap-2">
+            <button class="btn btn-primary flex-1" onclick="CDRView.openCreate()">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
               New CDR
             </button>
@@ -60,7 +55,9 @@ const CDRView = {
     </div>
 
     <div class="section-card">
-      <div class="section-card-header"><h3>CDR List</h3></div>
+      <div class="section-card-header">
+        <h3>CDR List</h3>
+      </div>
       <div id="cdr-list-body" class="table-scroll">
         <div class="flex justify-center py-10"><div class="spinner"></div></div>
       </div>
@@ -68,25 +65,58 @@ const CDRView = {
     `;
   },
 
-  async afterRender() {
-    this._schools = (await DB.getSchools()).data || [];
-    await this.load();
+  afterRender() { this._initView(); },
+
+  async _initView() {
+    const [schoolsRes, ftRes] = await Promise.all([
+      DB.getSchools(),
+      DB.getFundTypes(this._category),
+    ]);
+    this._schools = schoolsRes.data || [];
+
+    // Populate school dropdown
+    const schoolSel = document.getElementById('cdr-filter-school');
+    if (schoolSel) {
+      if (this._schoolId) {
+        const s = this._schools.find(s => s.id === this._schoolId);
+        if (s) schoolSel.innerHTML = `<option value="${this._schoolId}">${s.name}</option>`;
+      } else {
+        schoolSel.innerHTML = `<option value="">All Schools</option>` +
+          this._schools.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+      }
+    }
+
+    // Populate fund type dropdown
+    const ftSel = document.getElementById('cdr-filter-fundtype');
+    if (ftSel) ftSel.innerHTML = `<option value="">All Fund Types</option>` +
+      (ftRes.data || []).map(t => `<option value="${t.name}">${t.name}</option>`).join('');
+
+    this.load();
   },
 
   async load() {
     const school_id = this._schoolId || document.getElementById('cdr-filter-school')?.value || '';
-    const year = document.getElementById('cdr-filter-year')?.value || '';
-    const quarter = document.getElementById('cdr-filter-quarter')?.value || '';
+    const year      = document.getElementById('cdr-filter-year')?.value || '';
+    const fundType  = document.getElementById('cdr-filter-fundtype')?.value || '';
 
     const filters = {};
     if (school_id) filters.school_id = school_id;
-    if (year) filters.year = year;
+    if (year)      filters.year = year;
 
-    const { data } = await DB.getCDRHeaders(filters);
+    const [{ data }, { data: fundsData }] = await Promise.all([
+      DB.getCDRHeaders(filters),
+      DB.getFunds(school_id ? { school_id } : {}),
+    ]);
     let rows = data || [];
-    if (quarter) rows = rows.filter(r => r.quarter === quarter);
-    if (this._category === 'mooe')    rows = rows.filter(r => DashboardView._isMOOE(r.fund_type));
-    if (this._category === 'special') rows = rows.filter(r => !DashboardView._isMOOE(r.fund_type));
+    const funds = fundsData || [];
+
+    const norm = s => (s || '').trim().toLowerCase();
+    if (fundType) rows = rows.filter(r => norm(r.fund_type) === norm(fundType));
+    if (this._category === 'mooe') {
+      rows = rows.filter(r => DashboardView._isMOOE(r.fund_type) && parseInt(r.year) === 2026);
+    } else if (this._category === 'special') {
+      rows = rows.filter(r => !DashboardView._isMOOE(r.fund_type) && [2025, 2026].includes(parseInt(r.year)));
+    }
 
     const el = document.getElementById('cdr-list-body');
     if (!el) return;
@@ -96,26 +126,43 @@ const CDRView = {
       return;
     }
 
+    const fundAmt = r => {
+      const f = (r.fund_id && funds.find(f => f.id === r.fund_id))
+             || funds.find(f => f.school_id === r.school_id && norm(f.fund_type) === norm(r.fund_type));
+      return f ? parseFloat(f.amount) || 0 : 0;
+    };
+
+    const isSpecial = this._category === 'special';
+
     el.innerHTML = `
-    <table class="data-table">
+    <table class="data-table" style="table-layout:fixed;width:100%">
+      <colgroup>
+        <col style="width:200px"/>
+        <col style="width:55px"/>
+        <col style="width:180px"/>
+        <col style="width:110px"/>
+        <col style="width:60px"/>
+        <col style="width:190px"/>
+      </colgroup>
       <thead><tr>
-        <th>School</th><th>Year</th><th>Quarter</th><th>Fund Type</th>
-        <th class="text-right">Opening Balance</th><th>Entries</th><th>Actions</th>
+        <th>School</th><th>Year</th>
+        <th>Fund Type</th>
+        <th class="col-amount">Fund Amount</th>
+        <th class="text-center">Entries</th>
+        <th>Actions</th>
       </tr></thead>
       <tbody>
         ${rows.map(r => `
         <tr>
-          <td class="font-medium">${this._schoolName(r.school_id)}</td>
+          <td class="font-medium" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${this._schoolName(r.school_id)}</td>
           <td>${r.year}</td>
-          <td><span class="badge badge-submitted">${r.quarter}</span></td>
-          <td class="text-xs text-gray-600">${r.fund_type || '—'}</td>
-          <td class="text-right font-semibold">${fmt(r.opening_balance)}</td>
+          <td class="text-xs text-gray-600" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.fund_type || '—'}</td>
+          <td class="col-amount font-semibold">${fmt(fundAmt(r))}</td>
           <td class="text-center text-xs text-gray-500">${r.entry_count || 0}</td>
           <td>
             <div class="flex gap-1">
               <button class="btn btn-secondary btn-sm" onclick="CDRView.showDetail('${r.id}')">View</button>
-              <button class="btn btn-secondary btn-sm" onclick="CDRPdf.download('${r.id}')">Download PDF</button>
-              <button class="btn btn-primary btn-sm" onclick="CDRPdf.print('${r.id}')">Print</button>
+              <button class="btn btn-secondary btn-sm" onclick="CDRXlsx.download('${r.id}')">Excel</button>
               <button class="btn btn-danger btn-sm" onclick="CDRView.deleteHeader('${r.id}')">Del</button>
             </div>
           </td>
@@ -137,8 +184,7 @@ const CDRView = {
   async openCreate() {
     const schools = this._schools || [];
     const yr = new Date().getFullYear();
-    const years = [];
-    for (let y = yr; y >= yr - 4; y--) years.push(y);
+    const years = this._category === 'mooe' ? [2026] : [2026, 2025];
 
     const { data: ftData } = await DB.getFundTypes(this._category);
     const ftOpts = (ftData || []).map(t => `<option value="${t.name}">${t.name}</option>`).join('');
@@ -148,24 +194,19 @@ const CDRView = {
       <div class="grid grid-cols-2 gap-3 mb-3">
         <div class="col-span-2">
           <label class="form-label">School *</label>
-          <select id="cdr-school" class="form-select" required>
-            <option value="">Select school…</option>
-            ${schools.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
-          </select>
+          ${this._schoolId
+            ? `<select id="cdr-school" class="form-select" required>
+                 <option value="${this._schoolId}">${schools.find(s => s.id === this._schoolId)?.name || 'My School'}</option>
+               </select>`
+            : `<select id="cdr-school" class="form-select" required>
+                 <option value="">Select school…</option>
+                 ${schools.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
+               </select>`}
         </div>
         <div>
           <label class="form-label">Year *</label>
           <select id="cdr-year" class="form-select" required>
             ${years.map(y => `<option value="${y}" ${y === yr ? 'selected' : ''}>${y}</option>`).join('')}
-          </select>
-        </div>
-        <div>
-          <label class="form-label">Quarter *</label>
-          <select id="cdr-quarter" class="form-select" required>
-            <option value="Q1">Q1 (Jan–Mar)</option>
-            <option value="Q2">Q2 (Apr–Jun)</option>
-            <option value="Q3">Q3 (Jul–Sep)</option>
-            <option value="Q4">Q4 (Oct–Dec)</option>
           </select>
         </div>
         <div class="col-span-2">
@@ -175,11 +216,6 @@ const CDRView = {
             ${ftOpts}
           </select>
         </div>
-        ${this._category !== 'mooe' ? `
-        <div class="col-span-2">
-          <label class="form-label">Opening Balance (Advances Received)</label>
-          <input id="cdr-opening" type="number" step="0.01" class="form-input" placeholder="0.00" value="0" />
-        </div>` : '<input type="hidden" id="cdr-opening" value="0" />'}
       </div>
       <div class="flex gap-2 justify-end">
         <button type="button" class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>
@@ -193,17 +229,43 @@ const CDRView = {
     e.preventDefault();
     const schoolId  = document.getElementById('cdr-school').value;
     const year      = parseInt(document.getElementById('cdr-year').value);
-    const quarter   = document.getElementById('cdr-quarter').value;
     const fundType  = document.getElementById('cdr-fund-type').value;
+
+    const normalize = s => (s || '').trim().toLowerCase();
+
+    // Duplicate check — block if same school + year + fund_type already exists
+    const { data: existing } = await DB.getCDRHeaders({ school_id: schoolId, year });
+    const duplicate = (existing || []).find(h => normalize(h.fund_type) === normalize(fundType));
+    if (duplicate) {
+      App.toast('A CDR for this school, year, and fund type already exists.', 'error');
+      return;
+    }
 
     const ordinal = { Q1: '1st', Q2: '2nd', Q3: '3rd', Q4: '4th' };
 
     // Find matching Fund Release for both MOOE and Special Funds
     const { data: funds } = await DB.getFunds({ school_id: schoolId });
-    const normalize = s => (s || '').trim().toLowerCase();
     const matched = (funds || []).filter(f => normalize(f.fund_type) === normalize(fundType));
     matched.sort((a, b) => (b.ada_date || '').localeCompare(a.ada_date || ''));
     const matchingFund = matched[0] || null;
+
+    // Auto-derive quarter from matching fund's fund_type name or ada_date
+    let quarter = 'Q1';
+    const src = matchingFund || null;
+    if (src) {
+      const ft = (src.fund_type || '').toLowerCase();
+      if      (ft.includes('1st quarter')) quarter = 'Q1';
+      else if (ft.includes('2nd quarter')) quarter = 'Q2';
+      else if (ft.includes('3rd quarter')) quarter = 'Q3';
+      else if (ft.includes('4th quarter')) quarter = 'Q4';
+      else if (src.ada_date) {
+        const mo = parseInt((src.ada_date || '').split('-')[1] || '1', 10);
+        quarter = 'Q' + Math.ceil(mo / 3);
+      }
+    } else {
+      const mo = new Date().getMonth() + 1;
+      quarter = 'Q' + Math.ceil(mo / 3);
+    }
 
     const row = {
       id:              DB.newId(),
@@ -211,14 +273,11 @@ const CDRView = {
       year,
       quarter,
       fund_type:       fundType,
-      // opening_balance is 0 when a fund release is found (advance comes in as entry row)
-      // fallback to user-entered value for Special Funds with no matching release
-      opening_balance: matchingFund ? 0 : (this._category !== 'mooe' ? (parseFloat(document.getElementById('cdr-opening').value) || 0) : 0),
       entry_count:     matchingFund ? 1 : 0,
     };
 
     const { error } = await DB.upsertCDRHeader(row);
-    if (error) { App.toast('Error saving CDR: ' + error, 'error'); return; }
+    if (error) { App.toast('Error saving CDR: ' + (error?.message || error), 'error'); return; }
 
     if (matchingFund) {
       const particulars = this._category === 'mooe'
@@ -257,6 +316,8 @@ const CDRView = {
     const [headerRes, entriesRes] = await Promise.all([DB.getCDRHeader(id), DB.getCDREntries(id)]);
     const header = headerRes.data;
     const entries = entriesRes.data || [];
+    this._detailEntries = entries;
+    this._detailHeader  = header;
     if (!header) { App.toast('CDR not found', 'error'); return; }
 
     const school = this._getSchool(header.school_id);
@@ -268,8 +329,8 @@ const CDRView = {
     if (pt) pt.textContent = 'Cash Disbursement Register';
     if (ps) ps.textContent = `${school.name || ''} — ${header.year} ${header.quarter}`;
 
-    // Running balance
-    let balance = parseFloat(header.opening_balance) || 0;
+    // Running balance — starts at 0; first entry is the cash advance receipt
+    let balance = 0;
     const rows = entries.map(e => {
       const adv = parseFloat(e.advances) || 0;
       const pay = parseFloat(e.payment) || 0;
@@ -279,7 +340,7 @@ const CDRView = {
 
     const totalAdv = entries.reduce((s, e) => s + (parseFloat(e.advances) || 0), 0);
     const totalPay = entries.reduce((s, e) => s + (parseFloat(e.payment) || 0), 0);
-    const finalBal = rows.length > 0 ? rows[rows.length - 1].running_balance : (parseFloat(header.opening_balance) || 0);
+    const finalBal = rows.length > 0 ? rows[rows.length - 1].running_balance : 0;
 
     const uacsOpts = UACS_CODES.map(u =>
       `<option value="${u.code}" data-desc="${u.desc}">${u.code} — ${u.desc}</option>`
@@ -291,11 +352,8 @@ const CDRView = {
       <button class="btn btn-secondary btn-sm" onclick="CDRView.backToList()">
         ← Back to CDR List
       </button>
-      <button class="btn btn-secondary btn-sm" onclick="CDRPdf.download('${id}')">
-        ⬇ Download PDF
-      </button>
-      <button class="btn btn-primary btn-sm" onclick="CDRPdf.print('${id}')">
-        Print CDR
+      <button class="btn btn-primary btn-sm" onclick="CDRXlsx.download('${id}')">
+        Download Excel
       </button>
     </div>
 
@@ -306,56 +364,19 @@ const CDRView = {
           <div><span class="text-gray-500 text-xs block">School</span><strong>${school.name || '—'}</strong></div>
           <div><span class="text-gray-500 text-xs block">Year / Quarter</span><strong>${header.year} ${header.quarter}</strong></div>
           <div><span class="text-gray-500 text-xs block">Fund Type</span><strong>${header.fund_type || '—'}</strong></div>
-          <div><span class="text-gray-500 text-xs block">Opening Balance</span><strong class="text-blue-700">${fmt(header.opening_balance)}</strong></div>
         </div>
       </div>
     </div>
 
-    <!-- Add Transaction Form -->
-    <div class="section-card mb-4">
-      <div class="section-card-header">
-        <h3>Add Transaction</h3>
-      </div>
-      <div class="section-card-body">
-        <form id="cdr-entry-form" onsubmit="CDRView.saveInlineEntry(event,'${id}')">
-          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
-            <div>
-              <label class="form-label">Date *</label>
-              <input id="ei-date" type="date" class="form-input" required value="${new Date().toISOString().slice(0,10)}" />
-            </div>
-            <div>
-              <label class="form-label">DV / Check No.</label>
-              <input id="ei-ref" type="text" class="form-input" placeholder="e.g. 2026-01-001 1496368" />
-            </div>
-            <div class="sm:col-span-2">
-              <label class="form-label">Particulars *</label>
-              <input id="ei-particulars" type="text" class="form-input" required placeholder="Description of transaction" />
-            </div>
-          </div>
-          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-3">
-            <div>
-              <label class="form-label">Payment (₱)</label>
-              <input id="ei-payment" type="number" step="0.01" min="0" class="form-input" placeholder="0.00" />
-            </div>
-            <div class="sm:col-span-2">
-              <label class="form-label">UACS Object Code & Name</label>
-              <select id="ei-uacs" class="form-select">
-                <option value="">— Select UACS (required for payments) —</option>
-                ${uacsOpts}
-              </select>
-            </div>
-          </div>
-          <div class="flex justify-end">
-            <button type="submit" class="btn btn-primary">
-              + Add Transaction
-            </button>
-          </div>
-        </form>
-      </div>
+    <!-- Add Transaction Button -->
+    <div class="flex justify-end mb-4">
+      <button class="btn btn-primary" onclick="CDRView.openCreateMulti('${id}')">
+        + Add Transaction
+      </button>
     </div>
 
     <!-- Transactions Table -->
-    <div class="section-card">
+    <div id="cdr-txn-wrap" class="section-card">
       <div class="section-card-header">
         <h3>Transactions</h3>
         <span class="text-xs text-gray-500">${entries.length} entr${entries.length !== 1 ? 'ies' : 'y'}</span>
@@ -366,35 +387,35 @@ const CDRView = {
             <th>#</th>
             <th>Date</th>
             <th>DV / Check No.</th>
+            <th>Payee</th>
             <th>Particulars</th>
-            <th>UACS Code</th>
-            <th class="text-right">Cash Advance</th>
-            <th class="text-right">Payment</th>
-            <th class="text-right">Balance</th>
+            <th>UACS Name</th>
+            <th class="col-amount">Cash Advance</th>
+            <th class="col-amount">Payment</th>
+            <th class="col-amount">Balance</th>
             <th></th>
           </tr></thead>
           <tbody>
-            <tr class="bg-blue-50 text-xs font-semibold">
-              <td colspan="7">Opening Balance</td>
-              <td class="text-right font-bold">${fmt(header.opening_balance)}</td>
-              <td></td>
-            </tr>
             ${rows.length === 0
-              ? `<tr><td colspan="9" class="text-center text-gray-400 py-8 text-sm">No transactions yet. Use the form above to add the first entry.</td></tr>`
+              ? `<tr><td colspan="10" class="text-center text-gray-400 py-8 text-sm">No transactions yet. Use the form above to add the first entry.</td></tr>`
               : rows.map((e, i) => {
-                  const uacsLabel = e.uacs_code
-                    ? `<span class="font-mono" title="${e.uacs_desc || ''}">${e.uacs_code}</span>`
-                    : '—';
+                  const uacsLabel = e.uacs_lines
+                    ? (() => { try { return JSON.parse(e.uacs_lines).map(l => l.desc || l.code).join(', '); } catch { return 'Multiple UACS'; } })()
+                    : (e.uacs_code ? (e.uacs_desc || UACS_CODES.find(u => u.code === e.uacs_code)?.desc || e.uacs_code) : '—');
+                  const dvCheck = e.dv_no || e.check_no
+                    ? [e.dv_no, e.check_no].filter(Boolean).join('/')
+                    : (e.ref_no || '—');
                   return `
                   <tr>
                     <td class="text-xs text-gray-400">${i + 1}</td>
                     <td class="text-xs whitespace-nowrap">${formatDate(e.entry_date)}</td>
-                    <td class="text-xs text-gray-600">${e.ref_no || '—'}</td>
+                    <td class="text-xs text-gray-600">${dvCheck}</td>
+                    <td class="text-xs">${e.payee || '—'}</td>
                     <td class="text-xs">${e.particulars || '—'}</td>
                     <td class="text-xs">${uacsLabel}</td>
-                    <td class="text-right text-xs">${(parseFloat(e.advances)||0) > 0 ? fmt(e.advances) : ''}</td>
-                    <td class="text-right text-xs font-semibold text-blue-700">${(parseFloat(e.payment)||0) > 0 ? fmt(e.payment) : ''}</td>
-                    <td class="text-right text-xs font-bold">${fmt(e.running_balance)}</td>
+                    <td class="col-amount text-xs">${(parseFloat(e.advances)||0) > 0 ? fmt(e.advances) : ''}</td>
+                    <td class="col-amount text-xs font-semibold text-blue-700">${(parseFloat(e.payment)||0) > 0 ? fmt(e.payment) : ''}</td>
+                    <td class="col-amount text-xs font-bold">${fmt(e.running_balance)}</td>
                     <td>
                       <button class="btn btn-danger btn-sm" onclick="CDRView.deleteEntry('${e.id}','${id}')">Del</button>
                     </td>
@@ -403,10 +424,10 @@ const CDRView = {
             }
             ${entries.length > 0 ? `
             <tr class="bg-gray-50 font-bold text-xs">
-              <td colspan="5" class="text-right pr-2">TOTAL</td>
-              <td class="text-right">${fmt(totalAdv)}</td>
-              <td class="text-right text-blue-700">${fmt(totalPay)}</td>
-              <td class="text-right">${fmt(finalBal)}</td>
+              <td colspan="6" class="text-right pr-2">TOTAL</td>
+              <td class="col-amount">${fmt(totalAdv)}</td>
+              <td class="col-amount text-blue-700">${fmt(totalPay)}</td>
+              <td class="col-amount">${fmt(finalBal)}</td>
               <td></td>
             </tr>` : ''}
           </tbody>
@@ -435,44 +456,6 @@ const CDRView = {
     if (inp) inp.value = desc;
   },
 
-  async saveInlineEntry(e, cdr_id) {
-    e.preventDefault();
-    const uacs_code = document.getElementById('ei-uacs').value;
-    const uacs_desc = uacs_code
-      ? (UACS_CODES.find(u => u.code === uacs_code)?.desc || '')
-      : '';
-    const advances = 0;
-    const payment  = parseFloat(document.getElementById('ei-payment').value)  || 0;
-
-    if (payment === 0) {
-      App.toast('Enter a Payment amount.', 'error'); return;
-    }
-    if (!uacs_code) {
-      App.toast('Please select a UACS code for the payment.', 'error'); return;
-    }
-
-    const row = {
-      id: DB.newId(),
-      cdr_id,
-      entry_date:  document.getElementById('ei-date').value,
-      particulars: document.getElementById('ei-particulars').value.trim(),
-      uacs_code,
-      uacs_desc,
-      advances,
-      payment,
-      ref_no: document.getElementById('ei-ref').value.trim(),
-      sort_order: Date.now(),
-    };
-    const { error } = await DB.upsertCDREntry(row);
-    if (error) { App.toast('Error: ' + error, 'error'); return; }
-
-    const { data: existing } = await DB.getCDREntries(cdr_id);
-    await DB.upsertCDRHeader({ id: cdr_id, entry_count: (existing || []).length });
-
-    App.toast('Transaction added!');
-    await this.showDetail(cdr_id);
-  },
-
   async deleteEntry(entry_id, cdr_id) {
     if (!confirm('Delete this entry?')) return;
     await DB.deleteCDREntry(entry_id);
@@ -480,6 +463,257 @@ const CDRView = {
     await DB.upsertCDRHeader({ id: cdr_id, entry_count: (existing || []).length });
     App.toast('Entry deleted.');
     await this.showDetail(cdr_id);
+  },
+
+  // ---- Multi-UACS entry form ----
+  openCreateMulti(cdr_id) {
+    const uacsOpts = UACS_CODES.map(u =>
+      `<option value="${u.code}">${u.code} — ${u.desc}</option>`
+    ).join('');
+    const lineHtml = `
+      <div class="uacs-line flex gap-2 mb-2 items-center">
+        <select class="form-select flex-1 uacs-line-code" style="min-width:0">
+          <option value="">— Select UACS —</option>${uacsOpts}
+        </select>
+        <input type="number" step="0.01" min="0" class="form-input uacs-line-amount"
+               style="width:110px;flex-shrink:0" placeholder="0.00"
+               oninput="CDRView.updateMultiTotal()" />
+        <button type="button" class="btn btn-danger btn-sm"
+                onclick="this.closest('.uacs-line').remove(); CDRView.updateMultiTotal()">×</button>
+      </div>`;
+    const html = `
+      <div class="grid grid-cols-2 gap-3 mb-3">
+        <div>
+          <label class="form-label">Date *</label>
+          <input id="mi-date" type="date" class="form-input" required
+                 value="${new Date().toISOString().slice(0,10)}" />
+        </div>
+        <div>
+          <label class="form-label">DV No.</label>
+          <input id="mi-dv" type="text" class="form-input"
+                 placeholder="e.g. 2026-01-001" />
+        </div>
+        <div>
+          <label class="form-label">Check No. *</label>
+          <input id="mi-check" type="text" class="form-input" required
+                 placeholder="e.g. 1496368" />
+        </div>
+        <div>
+          <label class="form-label">Payee *</label>
+          <input id="mi-payee" type="text" class="form-input" required
+                 placeholder="e.g. Juan dela Cruz" />
+        </div>
+        <div class="col-span-2">
+          <label class="form-label">Particulars *</label>
+          <input id="mi-particulars" type="text" class="form-input" required
+                 placeholder="Description of transaction" />
+        </div>
+      </div>
+      <div class="mb-3">
+        <div class="flex items-center justify-between mb-2">
+          <label class="form-label mb-0 font-semibold">UACS Breakdown</label>
+          <button type="button" class="btn btn-secondary btn-sm"
+                  onclick="CDRView.addUACSLine()">+ Add UACS</button>
+        </div>
+        <div id="mi-uacs-lines">${lineHtml}</div>
+      </div>
+      <div class="flex items-center justify-between pt-2 border-t border-gray-200">
+        <div class="text-sm font-semibold text-gray-700">Total: ₱<span id="mi-total">0.00</span></div>
+        <div class="flex gap-2">
+          <button type="button" class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>
+          <button type="button" class="btn btn-primary"
+                  onclick="CDRView.saveMultiUACS('${cdr_id}')">Save Entry</button>
+        </div>
+      </div>`;
+    App.openModal('Multi-UACS Entry', html);
+  },
+
+  addUACSLine() {
+    const container = document.getElementById('mi-uacs-lines');
+    if (!container) return;
+    const uacsOpts = UACS_CODES.map(u =>
+      `<option value="${u.code}">${u.code} — ${u.desc}</option>`
+    ).join('');
+    const div = document.createElement('div');
+    div.className = 'uacs-line flex gap-2 mb-2 items-center';
+    div.innerHTML = `
+      <select class="form-select flex-1 uacs-line-code" style="min-width:0">
+        <option value="">— Select UACS —</option>${uacsOpts}
+      </select>
+      <input type="number" step="0.01" min="0" class="form-input uacs-line-amount"
+             style="width:110px;flex-shrink:0" placeholder="0.00"
+             oninput="CDRView.updateMultiTotal()" />
+      <button type="button" class="btn btn-danger btn-sm"
+              onclick="this.closest('.uacs-line').remove(); CDRView.updateMultiTotal()">×</button>`;
+    container.appendChild(div);
+  },
+
+  updateMultiTotal() {
+    const total = Array.from(document.querySelectorAll('.uacs-line-amount'))
+      .reduce((s, el) => s + (parseFloat(el.value) || 0), 0);
+    const el = document.getElementById('mi-total');
+    if (el) el.textContent = total.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  },
+
+  async saveMultiUACS(cdr_id) {
+    const date        = document.getElementById('mi-date').value;
+    const dv_no       = document.getElementById('mi-dv').value.trim();
+    const check_no    = document.getElementById('mi-check').value.trim();
+    const payee       = document.getElementById('mi-payee').value.trim();
+    const particulars = document.getElementById('mi-particulars').value.trim();
+
+    if (!date || !particulars) {
+      App.toast('Date and Particulars are required.', 'error'); return;
+    }
+    if (!check_no) { App.toast('Check No. is required.', 'error'); return; }
+    if (!payee)    { App.toast('Payee is required.', 'error'); return; }
+
+    const ref_no = [dv_no, check_no].filter(Boolean).join('/');
+
+    const uacs_lines = [];
+    let total = 0;
+    for (const line of document.querySelectorAll('#mi-uacs-lines .uacs-line')) {
+      const code   = line.querySelector('.uacs-line-code').value;
+      const amount = parseFloat(line.querySelector('.uacs-line-amount').value) || 0;
+      if (!code)       { App.toast('Select a UACS code for every line.', 'error'); return; }
+      if (amount <= 0) { App.toast('Each UACS amount must be greater than 0.', 'error'); return; }
+      const desc = UACS_CODES.find(u => u.code === code)?.desc || '';
+      uacs_lines.push({ code, desc, amount });
+      total += amount;
+    }
+
+    if (uacs_lines.length === 0) {
+      App.toast('Add at least one UACS line.', 'error'); return;
+    }
+
+    const row = {
+      id:         DB.newId(),
+      cdr_id,
+      entry_date: date,
+      ref_no,
+      dv_no,
+      check_no,
+      payee,
+      particulars,
+      uacs_code:  null,
+      uacs_desc:  null,
+      advances:   0,
+      payment:    total,
+      uacs_lines: JSON.stringify(uacs_lines),
+      sort_order: Date.now(),
+    };
+
+    // Optimistic update — show immediately, save in background
+    if (!this._detailEntries) this._detailEntries = [];
+    this._detailEntries.push(row);
+    this._refreshDetailTable();
+    App.toast('Transaction added!');
+
+    // Reset form immediately
+    const miDate  = document.getElementById('mi-date');
+    const miDV    = document.getElementById('mi-dv');
+    const miChk   = document.getElementById('mi-check');
+    const miPayee = document.getElementById('mi-payee');
+    const miPart  = document.getElementById('mi-particulars');
+    const miLines = document.getElementById('mi-uacs-lines');
+    const miTotal = document.getElementById('mi-total');
+    if (miDate)  miDate.value  = new Date().toISOString().slice(0, 10);
+    if (miDV)    miDV.value    = '';
+    if (miChk)   miChk.value   = '';
+    if (miPayee) miPayee.value = '';
+    if (miPart)  miPart.value  = '';
+    if (miTotal) miTotal.textContent = '0.00';
+    if (miLines) {
+      const opts = UACS_CODES.map(u => `<option value="${u.code}">${u.code} — ${u.desc}</option>`).join('');
+      const line = `<div class="uacs-line flex gap-2 mb-2 items-center">
+        <select class="form-select flex-1 uacs-line-code" style="min-width:0">
+          <option value="">— Select UACS —</option>${opts}
+        </select>
+        <input type="number" step="0.01" min="0" class="form-input uacs-line-amount"
+               style="width:110px;flex-shrink:0" placeholder="0.00"
+               oninput="CDRView.updateMultiTotal()" />
+        <button type="button" class="btn btn-danger btn-sm"
+                onclick="this.closest('.uacs-line').remove(); CDRView.updateMultiTotal()">×</button>
+      </div>`;
+      miLines.innerHTML = line;
+    }
+
+    // Background save — revert on error
+    const { error } = await DB.upsertCDREntry(row);
+    if (error) {
+      this._detailEntries = this._detailEntries.filter(e => e.id !== row.id);
+      this._refreshDetailTable();
+      App.toast('Error saving: ' + (error?.message || error), 'error');
+      return;
+    }
+    DB.upsertCDRHeader({ id: cdr_id, entry_count: this._detailEntries.length });
+  },
+
+  _refreshDetailTable() {
+    const wrap = document.getElementById('cdr-txn-wrap');
+    if (!wrap) return;
+    const entries = this._detailEntries || [];
+    const id = this._detailId;
+    let balance = 0;
+    const rows = entries.map(e => {
+      const adv = parseFloat(e.advances) || 0;
+      const pay = parseFloat(e.payment)  || 0;
+      balance = balance + adv - pay;
+      return { ...e, running_balance: balance };
+    });
+    const totalAdv = entries.reduce((s, e) => s + (parseFloat(e.advances) || 0), 0);
+    const totalPay = entries.reduce((s, e) => s + (parseFloat(e.payment)  || 0), 0);
+    const finalBal = rows.length > 0 ? rows[rows.length - 1].running_balance : 0;
+    wrap.innerHTML = `
+      <div class="section-card-header">
+        <h3>Transactions</h3>
+        <span class="text-xs text-gray-500">${entries.length} entr${entries.length !== 1 ? 'ies' : 'y'}</span>
+      </div>
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead><tr>
+            <th>#</th><th>Date</th><th>DV / Check No.</th><th>Payee</th><th>Particulars</th>
+            <th>UACS Name</th>
+            <th class="col-amount">Cash Advance</th>
+            <th class="col-amount">Payment</th>
+            <th class="col-amount">Balance</th>
+            <th></th>
+          </tr></thead>
+          <tbody>
+            ${rows.length === 0
+              ? `<tr><td colspan="10" class="text-center text-gray-400 py-8 text-sm">No transactions yet. Use the form above to add the first entry.</td></tr>`
+              : rows.map((e, i) => {
+                  const uacsLabel = e.uacs_lines
+                    ? (() => { try { return JSON.parse(e.uacs_lines).map(l => l.desc || l.code).join(', '); } catch { return 'Multiple UACS'; } })()
+                    : (e.uacs_code ? (e.uacs_desc || UACS_CODES.find(u => u.code === e.uacs_code)?.desc || e.uacs_code) : '—');
+                  const dvCheck = e.dv_no || e.check_no
+                    ? [e.dv_no, e.check_no].filter(Boolean).join('/')
+                    : (e.ref_no || '—');
+                  return `<tr>
+                    <td class="text-xs text-gray-400">${i + 1}</td>
+                    <td class="text-xs whitespace-nowrap">${formatDate(e.entry_date)}</td>
+                    <td class="text-xs text-gray-600">${dvCheck}</td>
+                    <td class="text-xs">${e.payee || '—'}</td>
+                    <td class="text-xs">${e.particulars || '—'}</td>
+                    <td class="text-xs">${uacsLabel}</td>
+                    <td class="col-amount text-xs">${(parseFloat(e.advances)||0) > 0 ? fmt(e.advances) : ''}</td>
+                    <td class="col-amount text-xs font-semibold text-blue-700">${(parseFloat(e.payment)||0) > 0 ? fmt(e.payment) : ''}</td>
+                    <td class="col-amount text-xs font-bold">${fmt(e.running_balance)}</td>
+                    <td><button class="btn btn-danger btn-sm" onclick="CDRView.deleteEntry('${e.id}','${id}')">Del</button></td>
+                  </tr>`;
+                }).join('')
+            }
+            ${entries.length > 0 ? `
+            <tr class="bg-gray-50 font-bold text-xs">
+              <td colspan="6" class="text-right pr-2">TOTAL</td>
+              <td class="col-amount">${fmt(totalAdv)}</td>
+              <td class="col-amount text-blue-700">${fmt(totalPay)}</td>
+              <td class="col-amount">${fmt(finalBal)}</td>
+              <td></td>
+            </tr>` : ''}
+          </tbody>
+        </table>
+      </div>`;
   },
 
   // ---- Download as PDF (F4 landscape, 8.5 × 13 in) using jsPDF ----
@@ -499,7 +733,7 @@ const CDRView = {
 
     // Cash advance injection — same as printCDR
     const hasAdvanceEntry = entries.some(e => (parseFloat(e.advances) || 0) > 0);
-    let startBalance = parseFloat(header.opening_balance) || 0;
+    let startBalance = 0;
     if (!hasAdvanceEntry) {
       const { data: releaseFunds } = await DB.getFunds({ school_id: header.school_id });
       const normalize = s => (s || '').trim().toLowerCase();
@@ -735,7 +969,7 @@ const CDRView = {
     const COL_JAN  = '5021202000';
     const numFmt   = '#,##0.00';
 
-    let bal = parseFloat(header.opening_balance) || 0;
+    let bal = 0;
     const rows = entries.map(e => {
       bal += (parseFloat(e.advances)||0) - (parseFloat(e.payment)||0);
       return { ...e, running_balance: bal };
@@ -743,7 +977,7 @@ const CDRView = {
 
     const totalAdv  = entries.reduce((s,e)=>s+(parseFloat(e.advances)||0),0);
     const totalPay  = entries.reduce((s,e)=>s+(parseFloat(e.payment)||0),0);
-    const finalBal  = rows.length ? rows[rows.length-1].running_balance : (parseFloat(header.opening_balance)||0);
+    const finalBal  = rows.length ? rows[rows.length-1].running_balance : 0;
     const totOff    = entries.filter(e=>e.uacs_code===COL_OFF).reduce((s,e)=>s+(parseFloat(e.payment)||0),0);
     const totGen    = entries.filter(e=>e.uacs_code===COL_GEN).reduce((s,e)=>s+(parseFloat(e.payment)||0),0);
     const totJan    = entries.filter(e=>e.uacs_code===COL_JAN).reduce((s,e)=>s+(parseFloat(e.payment)||0),0);
@@ -984,7 +1218,7 @@ const CDRView = {
     // If no entry already carries an advance amount, inject a cash advance row
     // from the matching Fund Release so the printed CDR always shows it first.
     const hasAdvanceEntry = entries.some(e => (parseFloat(e.advances) || 0) > 0);
-    let startBalance = parseFloat(header.opening_balance) || 0;
+    let startBalance = 0;
 
     if (!hasAdvanceEntry) {
       const { data: releaseFunds } = await DB.getFunds({ school_id: header.school_id });
@@ -1023,33 +1257,81 @@ const CDRView = {
     const COL_GENSVC = '5021299000';
     const COL_JANIT  = '5021202000';
 
-    const totOffice = entries.filter(e => e.uacs_code === COL_OFFICE).reduce((s,e) => s+(parseFloat(e.payment)||0), 0);
-    const totGenSvc = entries.filter(e => e.uacs_code === COL_GENSVC).reduce((s,e) => s+(parseFloat(e.payment)||0), 0);
-    const totJanit  = entries.filter(e => e.uacs_code === COL_JANIT ).reduce((s,e) => s+(parseFloat(e.payment)||0), 0);
+    // Flatten all UACS amounts (handles both single and multi-UACS entries)
+    const allUACSAmts = [];
+    entries.forEach(e => {
+      if (e.uacs_lines) {
+        try { JSON.parse(e.uacs_lines).forEach(l => allUACSAmts.push(l)); } catch {}
+      } else {
+        const pay = parseFloat(e.payment) || 0;
+        if (e.uacs_code && pay > 0) allUACSAmts.push({ code: e.uacs_code, desc: e.uacs_desc, amount: pay });
+      }
+    });
+    const totOffice = allUACSAmts.filter(l => l.code === COL_OFFICE).reduce((s,l) => s+(parseFloat(l.amount)||0), 0);
+    const totGenSvc = allUACSAmts.filter(l => l.code === COL_GENSVC).reduce((s,l) => s+(parseFloat(l.amount)||0), 0);
+    const totJanit  = allUACSAmts.filter(l => l.code === COL_JANIT ).reduce((s,l) => s+(parseFloat(l.amount)||0), 0);
 
-    const tableRows = rows.map(e => {
+    const tableRowParts = [];
+    rows.forEach(e => {
       const adv = parseFloat(e.advances) || 0;
       const pay = parseFloat(e.payment)  || 0;
-      const isOffice = e.uacs_code === COL_OFFICE;
-      const isGenSvc = e.uacs_code === COL_GENSVC;
-      const isJanit  = e.uacs_code === COL_JANIT;
-      const isOthers = !isOffice && !isGenSvc && !isJanit && pay > 0;
-      const othDesc  = isOthers ? (e.uacs_desc || UACS_CODES.find(u => u.code === e.uacs_code)?.desc || '') : '';
-      return `<tr>
-        <td style="text-align:center;white-space:nowrap;font-size:7pt">${_fd(e.entry_date)}</td>
-        <td style="font-size:6pt;word-break:break-all">${e.ref_no || ''}</td>
-        <td style="font-size:6.5pt">${e.particulars || ''}</td>
-        <td style="text-align:right">${adv > 0 ? _fp(adv) : ''}</td>
-        <td style="text-align:right">${pay > 0 ? _fp(pay) : ''}</td>
-        <td style="text-align:right;font-weight:bold">${_fp(e.running_balance)}</td>
-        <td style="text-align:right">${isOffice ? _fp(pay) : ''}</td>
-        <td style="text-align:right">${isGenSvc ? _fp(pay) : ''}</td>
-        <td style="text-align:right">${isJanit  ? _fp(pay) : ''}</td>
-        <td style="font-size:6pt">${othDesc}</td>
-        <td style="text-align:center;font-size:6pt">${isOthers ? (e.uacs_code||'') : ''}</td>
-        <td style="text-align:right">${isOthers ? _fp(pay) : ''}</td>
-      </tr>`;
-    }).join('');
+
+      if (e.uacs_lines) {
+        let lines; try { lines = JSON.parse(e.uacs_lines); } catch { lines = []; }
+        const fixedAmts = { [COL_OFFICE]: 0, [COL_GENSVC]: 0, [COL_JANIT]: 0 };
+        const otherLines = [];
+        lines.forEach(l => {
+          const a = parseFloat(l.amount) || 0;
+          if (l.code in fixedAmts) fixedAmts[l.code] += a;
+          else otherLines.push(l);
+        });
+        const fo = otherLines[0];
+        tableRowParts.push(`<tr>
+          <td style="text-align:center;white-space:nowrap;font-size:7pt">${_fd(e.entry_date)}</td>
+          <td style="font-size:6pt;word-break:break-all">${e.ref_no || ''}</td>
+          <td style="font-size:6.5pt">${e.particulars || ''}</td>
+          <td style="text-align:right"></td>
+          <td style="text-align:right">${_fp(pay)}</td>
+          <td style="text-align:right;font-weight:bold">${_fp(e.running_balance)}</td>
+          <td style="text-align:right">${fixedAmts[COL_OFFICE] > 0 ? _fp(fixedAmts[COL_OFFICE]) : ''}</td>
+          <td style="text-align:right">${fixedAmts[COL_GENSVC] > 0 ? _fp(fixedAmts[COL_GENSVC]) : ''}</td>
+          <td style="text-align:right">${fixedAmts[COL_JANIT]  > 0 ? _fp(fixedAmts[COL_JANIT])  : ''}</td>
+          <td style="font-size:6pt">${fo ? (fo.desc||'') : ''}</td>
+          <td style="text-align:center;font-size:6pt">${fo ? (fo.code||'') : ''}</td>
+          <td style="text-align:right">${fo ? _fp(parseFloat(fo.amount)||0) : ''}</td>
+        </tr>`);
+        for (let k = 1; k < otherLines.length; k++) {
+          const xl = otherLines[k];
+          tableRowParts.push(`<tr>
+            <td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>
+            <td style="font-size:6pt">${xl.desc||''}</td>
+            <td style="text-align:center;font-size:6pt">${xl.code||''}</td>
+            <td style="text-align:right">${_fp(parseFloat(xl.amount)||0)}</td>
+          </tr>`);
+        }
+      } else {
+        const isOffice = e.uacs_code === COL_OFFICE;
+        const isGenSvc = e.uacs_code === COL_GENSVC;
+        const isJanit  = e.uacs_code === COL_JANIT;
+        const isOthers = !isOffice && !isGenSvc && !isJanit && pay > 0;
+        const othDesc  = isOthers ? (e.uacs_desc || UACS_CODES.find(u => u.code === e.uacs_code)?.desc || '') : '';
+        tableRowParts.push(`<tr>
+          <td style="text-align:center;white-space:nowrap;font-size:7pt">${_fd(e.entry_date)}</td>
+          <td style="font-size:6pt;word-break:break-all">${e.ref_no || ''}</td>
+          <td style="font-size:6.5pt">${e.particulars || ''}</td>
+          <td style="text-align:right">${adv > 0 ? _fp(adv) : ''}</td>
+          <td style="text-align:right">${pay > 0 ? _fp(pay) : ''}</td>
+          <td style="text-align:right;font-weight:bold">${_fp(e.running_balance)}</td>
+          <td style="text-align:right">${isOffice ? _fp(pay) : ''}</td>
+          <td style="text-align:right">${isGenSvc ? _fp(pay) : ''}</td>
+          <td style="text-align:right">${isJanit  ? _fp(pay) : ''}</td>
+          <td style="font-size:6pt">${othDesc}</td>
+          <td style="text-align:center;font-size:6pt">${isOthers ? (e.uacs_code||'') : ''}</td>
+          <td style="text-align:right">${isOthers ? _fp(pay) : ''}</td>
+        </tr>`);
+      }
+    });
+    const tableRows = tableRowParts.join('');
 
     w.document.open();
     w.document.write(`<!DOCTYPE html>

@@ -31,9 +31,9 @@ const ResourcesView = {
     </div>`;
   },
 
-  async afterRender() {
-    if (!this.activeCategory || this.activeCategory === 'uacs_reference') await this.loadUACSRef();
-    await this.loadList();
+  afterRender() {
+    if (!this.activeCategory || this.activeCategory === 'uacs_reference') this.loadUACSRef();
+    this.loadList();
   },
 
   async loadUACSRef() {
@@ -236,7 +236,7 @@ const ResourcesView = {
         App.toast('Uploading PDF...');
         const path = `resources/${Date.now()}_${file.name}`;
         const { url: fileUrl, error } = await DB.uploadFile('resources', path, file);
-        if (error) { App.toast('Upload error: ' + error, 'error'); return; }
+        if (error) { App.toast('Upload error: ' + (error?.message || error), 'error'); return; }
         url = fileUrl;
       }
     }
@@ -250,7 +250,7 @@ const ResourcesView = {
       description: fd.get('description'),
     };
     const { error } = await DB.upsertResource(row);
-    if (error) { App.toast('Error: ' + error, 'error'); return; }
+    if (error) { App.toast('Error: ' + (error?.message || error), 'error'); return; }
     App.closeModal();
     App.toast('Resource saved!');
     await this.loadList();

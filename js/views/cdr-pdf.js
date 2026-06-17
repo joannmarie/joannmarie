@@ -29,7 +29,7 @@ const CDRPdf = {
 
     // Cash advance injection — same logic as printCDR / downloadPDF
     const hasAdvanceEntry = entries.some(e => (parseFloat(e.advances) || 0) > 0);
-    let startBalance = parseFloat(header.opening_balance) || 0;
+    let startBalance = 0;
     if (!hasAdvanceEntry) {
       const { data: releaseFunds } = await DB.getFunds({ school_id: header.school_id });
       const normalize = s => (s || '').trim().toLowerCase();
@@ -44,7 +44,6 @@ const CDRPdf = {
           : `Operating Advances for ${header.fund_type}`;
         entries = [{ id:'_adv', entry_date:rf.ada_date, ref_no:rf.ada_no||'', particulars,
           uacs_code:'', uacs_desc:'', advances:parseFloat(rf.amount)||0, payment:0 }, ...entries];
-        startBalance = 0;
       }
     }
 

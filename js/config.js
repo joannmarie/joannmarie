@@ -3,8 +3,8 @@
 // Replace these values with your own Supabase project settings.
 // Go to: https://supabase.com → Your Project → Settings → API
 // ============================================================
-const SUPABASE_URL = localStorage.getItem('sb_url') || '';
-const SUPABASE_ANON_KEY = localStorage.getItem('sb_key') || '';
+const SUPABASE_URL = localStorage.getItem('sb_url') || 'https://ohedorwitorgrtjtnhdb.supabase.co';
+const SUPABASE_ANON_KEY = localStorage.getItem('sb_key') || 'sb_publishable_12pOgU-J4nGqcmPdsHD20A_f7OCWF72';
 
 // App constants
 const APP_NAME = 'Dulag West District MOOE Dashboard';
